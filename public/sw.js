@@ -1,6 +1,6 @@
 // Cache only public application assets, never journal files or Google responses.
-const CACHE='monthly-shell-v2';
-const ASSETS=['./','./index.html','./styles.css','./app.js','./core.js','./storage.js','./favicon.svg','./timecard-template.csv'];
+const CACHE='monthly-shell-v3';
+const ASSETS=['./','./index.html','./styles.css','./app.js','./core.js','./payroll.js','./payroll-ui.js','./storage.js','./favicon.svg','./timecard-template.csv'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('monthly-shell-')&&k!==CACHE).map(k=>caches.delete(k)))));});
 self.addEventListener('fetch',event=>{

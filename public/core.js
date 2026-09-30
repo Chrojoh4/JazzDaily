@@ -1,3 +1,4 @@
+import {validatePayrollData} from './payroll.js';
 export const uid = () => crypto.randomUUID();
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 export const sum = a => a.reduce((x,y) => x+y, 0);
@@ -160,5 +161,6 @@ export function validateJournal(db) {
   for(const p of db.payrollPayments){unique(p);if(!db.staff.some(s=>s.id===p.staffId)||!validDate(p.date)||!num(p.amount)||!str(p.note))fail();}
   if(db.importKeys.some(k=>!str(k)))fail();
   for(const k of ['clientId','sheetId','range','dateOrder'])if(!str(db.settings.google[k]))fail();
+  validatePayrollData(db);
   return db;
 }

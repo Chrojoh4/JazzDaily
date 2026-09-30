@@ -40,7 +40,7 @@ node --test tests/core.test.mjs
 - Recurring bill templates populate a month the first time it is opened. Template edits do not overwrite existing months. A due day of 31 becomes the last day of a shorter month.
 - Additional expenses belong outside the bill allowance. Record a payment for an existing bill against that bill instead of creating another expense.
 
-This release supports regular gross hourly wages. It does **not** calculate overtime, statutory holiday/vacation pay, commissions, payroll deductions, employer contributions, sales taxes, or bank reconciliation. Split overnight work into separate dated time cards. Confirm any payroll-specific rules before relying on it for payroll processing.
+Time cards calculate straight-time hourly wages. The Payroll tab adds BC weekly deduction estimates, vacation pay, commission and holiday helpers, and CRA review records; see the scope below. Overtime eligibility, task-based commission time cards, sales taxes and bank reconciliation are not automated. Split overnight work into separate dated time cards.
 
 ## Google Form and Sheet imports
 
@@ -101,3 +101,39 @@ The website is public application code. Users do not need GitHub accounts to ope
 The Google sign-in flow requires a configured client and a private response sheet to verify end to end. Google Drive synchronization is performed by Drive for desktop and must be verified on the user's devices.
 
 Calendar columns and weekly summaries run Sunday through Saturday. Files & connections includes a direct Google Drive link, a session-only Google account connection, and a response-sheet link field. Google app setup remains required for private-sheet access.
+
+## BC weekly payroll estimates (2026)
+
+Use **Staff & wages → Payroll settings** for each employee, then **Payroll → Prepare weekly payroll**. Enter the employment start date, 52/53 weekly pay schedule, TD1 claim amounts, vacation percentage/agreement, and CPP/EI applicability. EI exemptions are individually configured and require a reason; family status never automatically exempts an employee. No SIN or banking data is required.
+
+Before the first calculation, enter opening year-to-date amounts from this employer, including pensionable earnings and contributions. Prior vacation/non-periodic payment amounts and their contribution portions are needed for subsequent vacation-tax calculations. Confirm zeros only when there were no prior payments. Opening balances are locked while payroll records are active.
+
+The earnings screen prefills approved straight-time hourly time cards. Review/replace earnings and add overtime adjustments or holiday pay as needed. The commission helper multiplies sales excluding tax/tips by a percentage; use separate manual subtotals when rates change during a week. It does not yet add task-based commission time cards. The holiday helper divides owner-reviewed eligible wages by eligible days in the preceding 30 calendar days; eligibility and worked-holiday premiums are reviewed manually. Vacation pay is calculated from the entered wage base and rate; additional eligible wage base can accommodate previously paid vacation and other entitlement adjustments. The annual vacation entitlement/reconciliation is not automated.
+
+### Calculation scope
+
+- BC employee payroll with pay dates in 2026. January–June and July–December tables are selected by **pay date**, not work date. Other years are blocked pending a rules update.
+- CRA T4127 Option 1 federal/BC income tax, basic/custom TD1 claims, additional tax, CPP/CPP2 with contribution ceilings and contributory-month proration, EI, standard employer EI multiplier 1.4, matching employer CPP, net pay and estimated remittance.
+- Weekly regular remuneration and scheduled commission without TD1X expenses. Vacation added on each cheque is treated as a non-periodic payment using the regular bonus method, including prior non-periodic earnings and enhanced CPP allocation. One weekly CPP exemption applies to combined regular/vacation pay. CPP exemption is truncated to cents; deductions and enhanced CPP allocations are rounded to cents.
+- The engine uses CRA's published bracket constants, basic-claim phaseout and BC reduction thresholds. Federal/BC credits annualize regular CPP/EI plus non-periodic portions, capped at annual maxima and with prior contributions as a floor. The period reaching an annual ceiling receives the maximum regular contribution credit. Total income tax is rounded once, so displayed federal/BC components may differ by a cent.
+- Not supported: other provinces/years, TD1X, irregular commission schedules, Quebec transfers, special tax credits/exempt claim code, RRSP/union/authorized deductions, non-cash taxable benefits, reduced employer EI rates, or termination/vacation-only payments. Use a separate CRA calculation for those cases.
+
+Every result starts **Needs CRA review**. Open the CRA calculator, enter the displayed inputs, compare and record corrected deductions if necessary. Corrected CPP/EI also require review of the non-periodic contribution portions. A note and confirmation are required to mark a result checked. This records the owner's comparison; the app does not contact CRA, submit payroll or certify CRA approval. The original estimate, employee settings and YTD inputs remain as a snapshot. Subsequent payroll uses verified actual deductions. Duplicate/overlapping periods, pending time cards and out-of-order runs are blocked. Void later records first to correct an earlier period; voiding preserves the audit record and does not reverse a payment.
+
+Payroll results are saved in the existing local journal/browser draft. Choose a save file for durable autosave. The application code is public on GitHub Pages; payroll records are not uploaded. A user-selected Drive desktop folder can sync the journal. This release still uses the existing file picker/browser recovery draft; a mandatory folder-opening shared-computer workflow remains separate work.
+
+Payroll results do not automatically create payment or expense entries. Record actual **net** payments separately using Record staff payment. Monthly clear still uses approved time-card gross wages and does not automatically include commission overrides, vacation or employer payroll contributions calculated in Payroll. Do not treat monthly clear as a reconciled payroll-inclusive profit figure.
+
+### Sources and verification
+
+Rules researched September 30, 2026:
+
+- [CRA T4127 January 2026 formulas](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4127-payroll-deductions-formulas/t4127-jan/t4127-jan-payroll-deductions-formulas-computer-programs.html)
+- [CRA T4127 July 2026 updates](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4127-payroll-deductions-formulas/t4127-jul/t4127-jul-payroll-deductions-formulas.html)
+- [CRA vacation/public holiday deductions](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/special-payments/vacation-pay-public-holidays.html)
+- [CRA commission payments](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/income-tax/employees-paid-commission.html)
+- [BC vacation entitlement](https://www2.gov.bc.ca/gov/content/employment-business/employment-standards-advice/employment-standards/time-off/vacation)
+- [BC statutory holiday calculations](https://www2.gov.bc.ca/gov/content/employment-business/employment-standards-advice/employment-standards/statutory-holidays/calculate-statutory-holiday-pay)
+- [CRA Payroll Deductions Online Calculator](https://www.canada.ca/en/revenue-agency/services/e-services/digital-services-businesses/payroll-deductions-online-calculator.html)
+
+`tests/payroll.test.mjs` covers published CRA reference calculations, contribution ceilings, CPP2 thresholds, July rules, exemptions, TD1 zero claims, vacation entitlement, rejected unsupported dates, historical snapshots, corrections and YTD sequencing. Browser checks use fictional data in a separate local origin. The owner's live PDOC comparison remains required before using results for actual pay.
