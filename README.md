@@ -69,7 +69,7 @@ The app includes the Google Identity Services token flow and Sheets read API. Yo
 2. Configure the OAuth consent screen, audience, and required test users while the project is in testing. Request the Sheets read-only scope: `https://www.googleapis.com/auth/spreadsheets.readonly`. Follow Google's verification requirements if distributing beyond your testing audience.
 3. Create a **Web application OAuth client ID**. Add `https://chrojoh4.github.io` as an authorized JavaScript origin. For local development also add `http://127.0.0.1:4173`. Origins contain no repository path.
 4. In **Files & connections**, enter the client ID, the response spreadsheet URL, and the sheet range (default `'Form Responses 1'!A:Z`). Save the connection.
-5. Choose **Connect & read sheet**, then **Connect to Google**. Sign in as someone with read access to the sheet. Map columns and review rows in the same import flow as CSV.
+5. Choose **Sign in with Google**, then **Continue to Google**. After connecting, choose **Import time cards**. Sign in as someone with read access to the sheet. Map columns and review rows in the same import flow as CSV.
 
 The read-only scope can authorize reading Google spreadsheets accessible to the signed-in account; the app requests only the configured range. The access token is used in memory for that read and is not persisted. No client secret is used in browser code. The app neither creates the Form nor writes to the response sheet. It does not perform background/unattended synchronization.
 
@@ -99,3 +99,5 @@ The website is public application code. Users do not need GitHub accounts to ope
 `tests/core.test.mjs` checks separate same-company bills, effective-date wage boundaries, fixed and whole-month allocations, cancellation, zero work days, negative residual allocation, duplicate imports, invalid imports, overlapping shifts, recurring snapshots, validation, and serialized autosave/external-file conflict handling.
 
 The Google sign-in flow requires a configured client and a private response sheet to verify end to end. Google Drive synchronization is performed by Drive for desktop and must be verified on the user's devices.
+
+Calendar columns and weekly summaries run Sunday through Saturday. Files & connections includes a direct Google Drive link, a session-only Google account connection, and a response-sheet link field. Google app setup remains required for private-sheet access.
