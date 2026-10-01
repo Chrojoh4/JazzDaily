@@ -1,5 +1,7 @@
 // Cache only public application assets, never journal files or Google responses.
-const CACHE='monthly-shell-v7';
+const CACHE='monthly-shell-v8';
+// Activate only after the user requests an update with their journal closed.
+self.addEventListener('message',event=>{if(event.data?.type==='ACTIVATE_UPDATE')event.waitUntil(self.skipWaiting());});
 const ASSETS=['./','./index.html','./styles.css','./app.js','./core.js','./workflow-core.js','./easy-ui.js','./install.js','./manifest.json','./icon-192.png','./icon-512.png','./payroll.js','./payroll-ui.js','./storage.js','./favicon.svg','./timecard-template.csv'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('monthly-shell-')&&k!==CACHE).map(k=>caches.delete(k)))));});
