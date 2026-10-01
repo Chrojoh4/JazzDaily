@@ -95,6 +95,7 @@ export function createRun(db,staffId,input,id){
   if((db.payrollRuns??[]).some(r=>r.staffId===staffId&&r.status!=='void'&&r.input.start<=input.end&&r.input.end>=input.start))throw Error('This employee already has payroll covering these work dates.');
   if(db.timecards.some(c=>c.staffId===staffId&&c.date>=input.start&&c.date<=input.end&&c.status==='pending'))throw Error('Review pending time cards in this period first.');
   const ytd=ytdFor(db,staffId,input.payDate),profile=structuredClone(staff.payroll),estimate=calculatePayroll(input,profile,ytd);
+  if(input.costDays)validateCostDays(input);
   return {id,staffId,employeeName:staff.name,input:structuredClone(input),profile,ytd,estimate,status:'draft',createdAt:new Date().toISOString()};
 }
 export function verifyRun(run,actual,note){
@@ -113,6 +114,7 @@ export function verifyRun(run,actual,note){
 export function voidRun(db,id,reason){
   const r=db.payrollRuns.find(r=>r.id===id);if(!r||r.status==='void')throw Error('Select an active payroll record.');
   if(!reason?.trim())throw Error('Enter a reason for discarding or voiding payroll.');
+  if(db.payrollPayments.some(p=>p.runId===id))throw Error('This payroll has a recorded payment. Remove the payment record in payment history before voiding payroll; this does not reverse a bank payment.');
   if(db.payrollRuns.some(x=>x.staffId===r.staffId&&x.status!=='void'&&x.input.payDate>r.input.payDate))throw Error('Void later payroll records for this employee first, so year-to-date amounts stay correct.');
   r.status='void';r.voidReason=reason.trim();r.voidedAt=new Date().toISOString();
 }
@@ -124,8 +126,11 @@ export function validatePayrollData(db){
   for(const r of db.payrollRuns){
     if(!r||typeof r.id!=='string'||!r.id||ids.has(r.id)||!db.staff.some(s=>s.id===r.staffId)||!['draft','verified','void'].includes(r.status)||typeof r.employeeName!=='string')throw Error('Invalid payroll record.');ids.add(r.id);
     const expected=calculatePayroll(r.input,r.profile,r.ytd);
+    if(r.input.costDays)validateCostDays(r.input);
     for(const [k,v]of Object.entries(expected))if(r.estimate?.[k]!==v)throw Error('Payroll estimate does not match its saved inputs.');
     if(r.actual){const check={...r,status:'draft'};verifyRun(check,r.actual,r.verificationNote);for(const [k,v]of Object.entries(check.actual))if(r.actual[k]!==v)throw Error('Invalid verified payroll totals.');}
     if(r.status==='verified'&&!r.actual)throw Error('Missing verified payroll totals.');
   }
 }
+function validateCostDays(input){if(typeof input.costDays!=='object'||Array.isArray(input.costDays)||!Object.keys(input.costDays).length)throw Error('Invalid staffing cost dates.');for(const [date,weight]of Object.entries(input.costDays))if(!dateOK(date)||date<input.start||date>input.end||!Number.isSafeInteger(weight)||weight<0||weight>1e11)throw Error('Invalid staffing cost allocation.');}
+export function recordPayrollPayment(db,id,paymentId){const r=(db.payrollRuns??[]).find(r=>r.id===id);if(!r||r.status!=='verified')throw Error('Check this payroll with CRA first.');if(db.payrollPayments.some(p=>p.runId===id))throw Error('This payment is already recorded.');if(db.payrollPayments.some(p=>p.staffId===r.staffId&&p.date===r.input.payDate))throw Error('A payment already exists for this employee and date. Review payment history first to avoid recording it twice.');db.payrollPayments.push({id:paymentId,staffId:r.staffId,date:r.input.payDate,amount:r.actual.net,note:'Weekly payroll payment',runId:id});}

@@ -1,4 +1,5 @@
-import {validatePayrollData} from './payroll.js';
+import {validatePayrollData,calculatePayroll,ytdFor} from './payroll.js';
+import {rateForCard,allocateCents,weekStart,addDays,periodLocked,payrollAlerts,holidays2026,holidayReviewed} from './workflow-core.js';
 export const uid = () => crypto.randomUUID();
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 export const sum = a => a.reduce((x,y) => x+y, 0);
@@ -56,20 +57,54 @@ export function rateFor(db,staffId,date) {
   const staff=db.staff.find(s=>s.id===staffId);
   return staff?.rates.filter(r=>r.effective<=date).sort((a,b)=>b.effective.localeCompare(a.effective))[0]?.cents??null;
 }
-export function earned(db,card) { const rate=rateFor(db,card.staffId,card.date); return rate===null?null:Math.round(card.minutes*rate/60); }
+export function earned(db,card) { const rate=rateForCard(db,card);if(!rate)return null;return rate.kind==='commission'?(Number.isSafeInteger(card.sales)&&card.sales>=0?Math.round(card.sales*rate.cents/10000):null):Math.round(card.minutes*rate.cents/60); }
+export function staffingByDay(db){
+  const result={},runs=(db.payrollRuns??[]).filter(r=>r.status!=='void');
+  const add=(date,cost,estimated=false,issue='')=>{const r=result[date]??={cost:0,estimated:false,issues:[]};if(cost===null)r.cost=null;else if(r.cost!==null)r.cost+=cost;r.estimated ||= estimated;if(issue&&!r.issues.includes(issue))r.issues.push(issue);};
+  for(const r of runs){
+    const a=r.actual??r.estimate,total=r.estimate.gross+a.employerCpp+a.employerEi;
+    // New runs retain immutable date weights. Legacy runs use the period-end date.
+    for(const [d,n]of Object.entries(allocateCents(total,r.input.costDays??{[r.input.end]:1})))add(d,n,r.status==='draft');
+  }
+  for(const date of Object.keys(holidays2026))if(date<=today()&&db.months[date.slice(0,7)]){
+    if(db.staff.some(s=>s.active&&(!s.payroll?.startDate||s.payroll.startDate<=date)&&!periodLocked(db,s.id,date)&&!holidayReviewed(db,s.id,date)))add(date,null,true,'Check holiday pay in Pay staff, even if the shop was closed.');
+  }
+  const groups=new Map();
+  for(const c of db.timecards.filter(c=>c.status!=='rejected'&&!periodLocked(db,c.staffId,c.date))){
+    if(c.status==='pending'){add(c.date,null,true,'A time card needs approval.');continue;}
+    const start=weekStart(c.date),key=c.staffId+'|'+start,g=groups.get(key)??{staffId:c.staffId,start,weights:{},missing:false};
+    const amount=earned(db,c);g.weights[c.date]=(g.weights[c.date]??0)+(amount??0);g.missing ||= amount===null;groups.set(key,g);
+  }
+  for(const g of groups.values()){
+    const p=db.staff.find(s=>s.id===g.staffId)?.payroll,end=addDays(g.start,6),total=sum(Object.values(g.weights)),alerts=payrollAlerts(db,g.staffId,g.start,end);
+    try{
+      if(g.missing)throw Error('A wage or commission sale is missing.');
+      if(!p?.confirmed)throw Error('Finish employee payroll setup.');
+      if(alerts.overtime.length||alerts.holidays.some(h=>!holidayReviewed(db,g.staffId,h.date)))throw Error('Check overtime or holiday pay in Pay staff.');
+      if(total===0){for(const date of Object.keys(g.weights))add(date,0,true);continue;}
+      const payDate=end<p.openingDate?p.openingDate:end;
+      const ytd=ytdFor(db,g.staffId,payDate);
+      const e=calculatePayroll({start:g.start,end,payDate,regular:total,stat:0,other:0,vacationBase:total,reviewed:true},p,ytd);
+      for(const [date,n]of Object.entries(allocateCents(e.employerCost,g.weights)))add(date,n,true);
+    }catch(e){for(const date of Object.keys(g.weights))add(date,null,true,e.message);}
+  }
+  return result;
+}
 export function dayTotals(db,month,date) {
   const m=db.months[month], day=m.days[date], cards=db.timecards.filter(t=>t.date===date&&t.status==='approved');
   const wages=cards.map(c=>earned(db,c)), missing=wages.some(x=>x===null);
   const expenses=sum(m.expenses.filter(e=>e.date===date).map(e=>e.amount));
   const allowance=allocations(db,month).values[date]??0;
   const wage=missing?null:sum(wages);
-  return {sales:day.sales,wages:wage,expenses,allowance,clear:day.sales===null||missing?null:day.sales-wage-expenses-allowance};
+  const staffing=staffingByDay(db)[date]??{cost:0,estimated:false,issues:[]};
+  return {sales:day.sales,wages:wage,staffing:staffing.cost,staffingEstimated:staffing.estimated,staffingIssues:staffing.issues,expenses,allowance,clear:day.sales===null||staffing.cost===null?null:day.sales-staffing.cost-expenses-allowance};
 }
 export function totals(db,month) {
   const m=db.months[month], all=Object.keys(m.days).map(d=>dayTotals(db,month,d));
   const wages=all.some(d=>d.wages===null)?null:sum(all.map(d=>d.wages));
   return { sales:sum(all.map(d=>d.sales??0)),wages,bills:sum(m.bills.map(b=>b.amount)),expenses:sum(m.expenses.map(e=>e.amount)),
-    clear:all.some(d=>d.sales!==null&&d.clear===null)?null:sum(all.filter(d=>d.sales!==null).map(d=>d.clear)),
+    staffing:all.some(d=>d.staffing===null)?null:sum(all.map(d=>d.staffing)),staffingEstimated:all.some(d=>d.staffingEstimated),
+    clear:all.some(d=>d.staffing===null)?null:sum(all.map(d=>d.sales??0))-sum(all.map(d=>d.staffing))-sum(all.map(d=>d.expenses))-sum(all.filter(d=>d.sales!==null).map(d=>d.allowance)),
     paid:sum(m.bills.map(b=>b.paid)),personal:sum(m.bills.filter(b=>b.category==='personal').map(b=>b.amount)),business:sum(m.bills.filter(b=>b.category==='business').map(b=>b.amount)),
     payrollPaid:sum(db.payrollPayments.filter(p=>p.date.startsWith(month)).map(p=>p.amount)),entered:all.filter(d=>d.sales!==null).length };
 }
@@ -83,8 +118,11 @@ export function shiftMinutes(start,end,breakMinutes) {
 export function cardIssue(db,card) {
   if(!db.staff.some(s=>s.id===card.staffId)) return 'Select a matching employee.';
   if(!validDate(card.date)) return 'Invalid work date.';
+  const startDate=db.staff.find(s=>s.id===card.staffId)?.payroll?.startDate;if(startDate&&card.date<startDate)return 'This date is before the employee started working here.';
   if(!Number.isInteger(card.minutes)||card.minutes<=0||card.minutes>1440) return 'Hours must be greater than zero and no more than 24.';
-  if(rateFor(db,card.staffId,card.date)===null) return 'No wage rate covers this work date.';
+  if(periodLocked(db,card.staffId,card.date))return 'Payroll already covers this date. Discard or void that payroll before changing time cards.';
+  if(!rateForCard(db,card))return 'No wage rate covers this work date.';
+  if(earned(db,card)===null)return 'Enter grooming sales for this commission time card.';
   const others=db.timecards.filter(t=>t.id!==card.id&&t.staffId===card.staffId&&t.date===card.date&&t.status==='approved');
   if(sum(others.map(t=>t.minutes))+card.minutes>1440) return 'Approved hours would exceed 24 for this day.';
   if(others.some(t=>!t.start||!card.start||(card.start<t.end&&card.end>t.start))) return 'Possible duplicate or overlapping shift. Review existing time cards first.';
@@ -146,7 +184,15 @@ export function validateJournal(db) {
   for(const key of ['staff','billTemplates','timecards','payrollPayments','importKeys'])if(!Array.isArray(db[key]))fail();
   if(!db.months||typeof db.months!=='object'||Array.isArray(db.months))fail();
   const ids=new Set(); const unique=x=>{if(!str(x.id)||!x.id||ids.has(x.id))fail();ids.add(x.id);};
+  if(db.holidayReviews!==undefined){if(!Array.isArray(db.holidayReviews))fail();const seen=new Set();for(const r of db.holidayReviews){const key=r.staffId+'|'+r.date;if(!db.staff.some(s=>s.id===r.staffId)||!holidays2026[r.date]||!str(r.note)||!r.note.trim()||typeof r.evidence!=='string'||r.evidence.length>1000000||seen.has(key))fail();seen.add(key);}}
   for(const s of db.staff) {unique(s);if(!str(s.name)||!str(s.code)||!Array.isArray(s.rates)||typeof s.active!=='boolean')fail();const datesSeen=new Set();for(const r of s.rates){if(!validDate(r.effective)||!num(r.cents)||datesSeen.has(r.effective))fail();datesSeen.add(r.effective);}}
+  for(const s of db.staff){
+    if(s.mainJob!==undefined&&!str(s.mainJob))fail();
+    if(s.roles!==undefined&&!Array.isArray(s.roles))fail();
+    const roleIds=new Set(['default']);
+    for(const role of s.roles??[]){if(!str(role.id)||!role.id||roleIds.has(role.id)||!str(role.name)||!Array.isArray(role.rates)||!role.rates.length)fail();roleIds.add(role.id);}
+    for(const rates of [s.rates,...(s.roles??[]).map(r=>r.rates)]){const seen=new Set();for(const r of rates){if(!validDate(r.effective)||!num(r.cents)||seen.has(r.effective)||(r.kind!==undefined&&!['hourly','commission'].includes(r.kind))||(r.kind==='commission'&&r.cents>10000))fail();seen.add(r.effective);}}
+  }
   if(new Set(db.staff.map(s=>s.code.toLowerCase())).size!==db.staff.length)fail();
   const bill=b=>{unique(b);if(!str(b.company)||!str(b.label)||!['personal','business'].includes(b.category)||!num(b.amount))fail();};
   for(const b of db.billTemplates){bill(b);if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(b.start)||!Number.isInteger(b.day)||b.day<1||b.day>31||(b.end&&!/^\d{4}-(0[1-9]|1[0-2])$/.test(b.end)))fail();}
@@ -158,9 +204,11 @@ export function validateJournal(db) {
     for(const e of m.expenses){unique(e);if(!validDate(e.date)||!e.date.startsWith(month)||!num(e.amount)||!str(e.description)||!['personal','business'].includes(e.category))fail();}
   }
   for(const c of db.timecards){unique(c);if(!db.staff.some(s=>s.id===c.staffId)||!validDate(c.date)||!Number.isInteger(c.minutes)||c.minutes<=0||c.minutes>1440||!['pending','approved','rejected'].includes(c.status)||!str(c.note)||!str(c.start)||!str(c.end)||(c.start&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(c.start))||(c.end&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(c.end)))fail();}
+  for(const c of db.timecards){const s=db.staff.find(s=>s.id===c.staffId);if(c.roleId!==undefined&&c.roleId!=='default'&&!(s.roles??[]).some(r=>r.id===c.roleId))fail();if(c.sales!==undefined&&c.sales!==null&&!num(c.sales))fail();}
   for(const p of db.payrollPayments){unique(p);if(!db.staff.some(s=>s.id===p.staffId)||!validDate(p.date)||!num(p.amount)||!str(p.note))fail();}
   if(db.importKeys.some(k=>!str(k)))fail();
   for(const k of ['clientId','sheetId','range','dateOrder'])if(!str(db.settings.google[k]))fail();
   validatePayrollData(db);
+  const paidRuns=new Set();for(const p of db.payrollPayments){if(p.runId){const r=(db.payrollRuns??[]).find(r=>r.id===p.runId);if(!r||r.status!=='verified'||p.staffId!==r.staffId||p.amount!==r.actual.net||p.date!==r.input.payDate||paidRuns.has(p.runId))fail();paidRuns.add(p.runId);}}
   return db;
 }

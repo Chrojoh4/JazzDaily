@@ -1,114 +1,55 @@
-# Monthly business journal
+# JazzDaily
 
-A private-file business journal built for **Chrojoh4/JazzDaily** and GitHub Pages. The website runs entirely in the browser. Financial records are not uploaded to GitHub or an application server.
+A local-file business journal for a small BC business. The public website contains application code only. Journal records stay in the selected file and a local browser recovery draft. No GitHub account is needed.
 
-## Start using it
+## Start here
 
-1. Open the website in desktop Chrome or Edge.
-2. Choose **Choose save file** and create `My-business.journal.json` in a local folder or Google Drive for desktop folder.
-3. Add employees and effective-dated hourly rates under **Staff & wages**.
-4. Add bills with a **company**, **account label**, and **Personal/Business** category. Every bill has an independent permanent ID; same-company bills never overwrite one another.
-5. Choose your usual work week under **Working days**. Open individual calendar dates to mark them Planned, Worked, Cancelled, or Off.
-6. Enter daily sales, review time cards, and add extra purchases under **Expenses**.
+1. Open JazzDaily in desktop Microsoft Edge or Chrome.
+2. Choose **Start a new journal**, give it a name, and select an empty folder. Existing users choose **Open journal folder**. The file is named JazzDaily.journal.json.
+3. Under **More → Employees & pay**, add employees, their jobs and dated hourly or commission rates. Complete each employee’s payroll settings, including earlier pay this year, vacation and applicable deductions.
+4. Under **More → Monthly bills**, add company, account label, Personal/Business, amount and due date. Separate accounts with the same company have independent IDs.
+5. Set working days and review the Sunday–Saturday calendar.
 
-The initial journal is blank. **Files & connections → Open example journal** creates clearly labelled fictional examples in your browser after confirmation. It does not modify your existing journal file. The original Excel workbook has not been imported or published.
+Each launch starts at the folder-opening screen. Financial data is not automatically displayed from the browser recovery draft. **Try with example data** is practice only and does not save changes.
 
-## Local development
+## Three everyday screens
 
-Requires Node.js 22 or newer; no dependency install or build is needed.
+- **Today:** enter sales, additional expenses and staff hours; see money left after bills and staffing costs. “Needs attention” means hours, employee setup or holiday/overtime review is incomplete.
+- **Staff time card:** choose name, work date, start/end and unpaid break. The job selector appears only for employees with multiple jobs. Commission jobs ask for sales excluding tax and tips. Submissions wait for approval.
+- **Pay staff:** review time cards, prepare a seven-day pay period, answer overtime/holiday questions, calculate, compare with CRA, and record the actual payment. Record payment does not transfer money or pay CRA.
 
-```sh
-node server.mjs
-# open http://127.0.0.1:4173
-node --test tests/core.test.mjs
-```
+For a holiday with no entitlement (including a week without hours), **Check holiday eligibility** records the decision and reason. A change to the relevant time cards or employment start date requires a fresh check. Eligible holiday pay is entered in weekly payroll. Substituted holidays need a written agreement and manual tracking of the replacement date.
 
-`npm start` and `npm test` are equivalent where npm is installed. Serve `public/` over HTTPS or localhost; do not double-click `index.html` because module scripts and file permissions need a web origin.
+## Desktop app and offline use
 
-## Calculations
+Choose **Install JazzDaily** on the opening screen in Edge or Chrome, then follow the browser’s installation prompt. If unavailable, use the browser’s app-install menu. This installs a web app that opens in its own window; it is not a separate Windows executable. The manifest also offers a Staff time card shortcut where supported.
 
-- Money is stored as integer cents. Hourly earnings are rounded to cents per time card.
-- Monthly coverage = personal bill amounts + business bill amounts. Amount paid does not change the coverage target.
-- The initial allowance is distributed across all Planned and Worked days. Remainder cents are assigned in date order so allocations reconcile exactly.
-- **Keep worked days fixed** is the default. Marking a day Worked snapshots its allowance. The rest of the monthly bill total is distributed across remaining Planned days.
-- **Recalculate all selected days** recalculates even historical days. The setting applies to all months and requires confirmation.
-- Cancelling/off removes a day's allocation and unlocks it; sales, time cards and expenses are retained. A review confirmation is required when that date has records.
-- With no remaining days, an unallocated balance is shown. If bills decrease below already allocated costs, remaining allowances can be negative and represent the credit needed to reconcile the month.
-- Daily clear = entered sales − approved wages − bill allowance − additional expenses. Blank sales mean unentered; zero means an entered zero-sales day. The headline clear total includes only dates with sales entered.
-- Wages earned use the latest rate effective **on or before the work date**. A missing historical rate blocks approval. A new raise never overwrites the previous rate. Retroactive changes affecting existing cards require explicit confirmation.
-- Wages paid are separate dated payment records. They appear in weekly totals and are not deducted again from daily clear.
-- Recurring bill templates populate a month the first time it is opened. Template edits do not overwrite existing months. A due day of 31 becomes the last day of a shorter month.
-- Additional expenses belong outside the bill allowance. Record a payment for an existing bill against that bill instead of creating another expense.
+The application shell is cached after a successful online visit. Once cached, ordinary journal work can run offline. Installation, updates, CRA checks and Drive syncing need internet. File permission may be requested again when opening the journal. Close and reopen the app after an update. Payroll rules currently support 2026 only; installing the app does not extend those rules to later years.
 
-Time cards calculate straight-time hourly wages. The Payroll tab adds BC weekly deduction estimates, vacation pay, commission and holiday helpers, and CRA review records; see the scope below. Overtime eligibility, task-based commission time cards, sales taxes and bank reconciliation are not automated. Split overnight work into separate dated time cards.
+## Saving and backups
 
-## Google Form and Sheet imports
+- Selecting a journal file grants access; edits autosave to that file. Check the save status before closing. Browsers without direct file access require manual backups and clearly show that autosave is unavailable.
+- A local browser recovery draft is a second recovery option, not the main journal. It does not automatically reopen or sync. Recovery requires choosing a destination before financial data is displayed.
+- An optional Google Drive **desktop folder** can sync the file between computers. There is no Google Form, public staff submission service, or Google sign-in inside this app. Wait for Drive to finish syncing before switching computers.
+- Use one editor at a time. An external file change stops autosave. Save a backup of the current draft, reopen the latest file and reconcile changes manually. Simultaneous/offline edits can still create Drive conflicts.
+- Keep regular backups. Files and browser recovery drafts are unencrypted. Anyone with access to that Windows/browser account and folder can read them, similarly to an unprotected spreadsheet. Opening a folder is a workflow step, not a password lock.
+- Never put private journals in public/ or commit them to GitHub. Ignore rules exclude *.journal.json and *.backup.json.
 
-### CSV (available immediately)
+## How money left is calculated
 
-Create a Google Form with these fields:
+Money is stored as integer cents. Monthly bill amounts are distributed over Planned and Worked days. Paid amounts do not change the bill coverage target. **Keep worked days fixed** retains past daily allowances and spreads the remainder over planned days; **Recalculate all selected days** redistributes across the whole month. Cancelled/off days lose their allocation but retain recorded sales, hours and expenses. Unallocated balances remain visible when no working days are left.
 
-| Field | Suggested format |
-|---|---|
-| Employee code | Dropdown matching the unique staff codes in the journal |
-| Work date | Date; format response-sheet column as `yyyy-mm-dd` |
-| Start time / End time | Time; format response-sheet columns as 24-hour `HH:mm` |
-| Break minutes | Number of unpaid minutes |
-| Paid hours | Optional alternative to start/end; decimal hours such as 7.5 |
-| Notes | Optional text |
+Daily money left = sales − allocated bills − additional expenses − staffing cost. Staffing includes gross wages/commission, vacation and employer CPP/EI. Employee deductions are already part of gross pay. Before saved payroll, this is a provisional estimate; missing setup, pending cards and overtime/holiday questions prevent a misleading complete figure. Saved payroll replaces that estimate and distributes its full cost over the work dates using fixed weights. Old payroll records without work-date weights use their period-end date. Recording net pay never deducts payroll a second time.
 
-Keep Google's submission timestamp. Link the form to a private response spreadsheet. Download that sheet as CSV, then use **Time cards → Import form responses**. Map your headings, choose month/day or day/month slash-date order, and review the import. Valid rows become pending cards. Invalid rows are left out with row-specific errors. Reimporting the same response skips it. An edited source response is treated as a new pending entry; reject/supersede the previous card as appropriate. Approval checks prevent overlapping approved shifts and catch duplicates when only paid hours are supplied.
+Monthly money left includes all staffing and extra expenses for the month, including days without sales; bill coverage is deducted for dates with sales entered. Blank sales means not entered; zero is an entered zero-sales day. This is a planning/cashout figure, not tax profit or bank reconciliation.
 
-Paid hours take precedence over start/end times when both are provided by an import. No Google access is required for CSV. `public/timecard-template.csv` contains fictional example headings and one example row.
-
-### Private live connection (requires your Google configuration)
-
-The app includes the Google Identity Services token flow and Sheets read API. You must configure it for your own Google account/project; no credentials are bundled.
-
-1. In Google Cloud, create/select a project and enable the **Google Sheets API**.
-2. Configure the OAuth consent screen, audience, and required test users while the project is in testing. Request the Sheets read-only scope: `https://www.googleapis.com/auth/spreadsheets.readonly`. Follow Google's verification requirements if distributing beyond your testing audience.
-3. Create a **Web application OAuth client ID**. Add `https://chrojoh4.github.io` as an authorized JavaScript origin. For local development also add `http://127.0.0.1:4173`. Origins contain no repository path.
-4. In **Files & connections**, enter the client ID, the response spreadsheet URL, and the sheet range (default `'Form Responses 1'!A:Z`). Save the connection.
-5. Choose **Sign in with Google**, then **Continue to Google**. After connecting, choose **Import time cards**. Sign in as someone with read access to the sheet. Map columns and review rows in the same import flow as CSV.
-
-The read-only scope can authorize reading Google spreadsheets accessible to the signed-in account; the app requests only the configured range. The access token is used in memory for that read and is not persisted. No client secret is used in browser code. The app neither creates the Form nor writes to the response sheet. It does not perform background/unattended synchronization.
-
-References: [Google token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model), [Sheets values API](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/get).
-
-## Saving and switching computers
-
-- Direct autosave requires the File System Access API, user selection of the file, and write permission. Reopen the file when starting a new browser session. The app deliberately does not silently reconnect and overwrite a file after a reload.
-- In browsers without direct file access, use Open and Download backup. Downloads are manual snapshots, not automatic syncing.
-- A recovery draft is also saved to browser storage. This is local to the browser profile; it does not sync to Drive and can be cleared by the browser. A shared computer profile can read its draft.
-- Save the file in a Google Drive **desktop** folder. Wait for Drive to finish syncing before opening that file on the other computer. The Google Sheet is the time-card input, separate from your journal data file.
-- Use one editor at a time. Before writing, the app compares the file contents against the last read/save. If it changed externally, autosave stops. Download a backup of your current draft, reopen the synced file, and reconcile entries manually. This is not distributed locking: simultaneous/offline edits on two computers may still create Drive conflicts.
-- **Choose save file / Save a copy** intentionally writes the current journal to the file you select. Choose a new filename when preserving another version.
-- Keep periodic downloaded backups. Files are plain JSON, not encrypted by this application. Never commit journal files to the repository. `.gitignore` excludes `*.journal.json` and `*.backup.json`.
-- After an initial online visit, the browser caches the application shell for offline use where service workers are supported. Google Sheet imports and Drive synchronization still need a connection; reopening a local file may require browser permission again.
-
-## GitHub Pages deployment
-
-The repository's `.github/workflows/pages.yml` tests the calculation engine and publishes **only `public/`** on pushes to `main`. No private journal data belongs in `public/`.
-
-In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. Push to `main` or run the workflow. The expected project URL is `https://chrojoh4.github.io/JazzDaily/`. Treat that URL as available only after a successful Pages deployment.
-
-The website is public application code. Users do not need GitHub accounts to open it; privacy comes from keeping each user's data file local, not from a GitHub login or app-level staff access controls.
-
-## Verification
-
-`tests/core.test.mjs` checks separate same-company bills, effective-date wage boundaries, fixed and whole-month allocations, cancellation, zero work days, negative residual allocation, duplicate imports, invalid imports, overlapping shifts, recurring snapshots, validation, and serialized autosave/external-file conflict handling.
-
-The Google sign-in flow requires a configured client and a private response sheet to verify end to end. Google Drive synchronization is performed by Drive for desktop and must be verified on the user's devices.
-
-Calendar columns and weekly summaries run Sunday through Saturday. Files & connections includes a direct Google Drive link, a session-only Google account connection, and a response-sheet link field. Google app setup remains required for private-sheet access.
+Rates are selected by work date and job. A raise preserves the earlier rate. Commission cards calculate sales × the effective percentage. Saved payroll locks its period’s time cards against edits; correct payroll first. Recurring bill edits affect future unopened months, leaving existing month copies intact. Record bill payments against the bill rather than entering the same amount as an extra expense.
 
 ## BC weekly payroll estimates (2026)
 
-Use **Staff & wages → Payroll settings** for each employee, then **Payroll → Prepare weekly payroll**. Enter the employment start date, 52/53 weekly pay schedule, TD1 claim amounts, vacation percentage/agreement, and CPP/EI applicability. EI exemptions are individually configured and require a reason; family status never automatically exempts an employee. No SIN or banking data is required.
+Payroll setup records employment date, vacation added to each cheque, written agreement, CPP/EI applicability and earlier year-to-date pay from this employer. Advanced settings hold TD1 claims, CPP months, additional tax and 52/53 weekly payments. EI exemptions are individual settings with a reason; family status does not automatically exempt anyone. No SIN or bank data is required.
 
-Before the first calculation, enter opening year-to-date amounts from this employer, including pensionable earnings and contributions. Prior vacation/non-periodic payment amounts and their contribution portions are needed for subsequent vacation-tax calculations. Confirm zeros only when there were no prior payments. Opening balances are locked while payroll records are active.
-
-The earnings screen prefills approved straight-time hourly time cards. Review/replace earnings and add overtime adjustments or holiday pay as needed. The commission helper multiplies sales excluding tax/tips by a percentage; use separate manual subtotals when rates change during a week. It does not yet add task-based commission time cards. The holiday helper divides owner-reviewed eligible wages by eligible days in the preceding 30 calendar days; eligibility and worked-holiday premiums are reviewed manually. Vacation pay is calculated from the entered wage base and rate; additional eligible wage base can accommodate previously paid vacation and other entitlement adjustments. The annual vacation entitlement/reconciliation is not automated.
+Approved hourly and commission cards prefill earnings. Overtime thresholds and statutory holidays prompt review; eligibility, premiums, minimum-wage top-ups, substituted holidays and annual vacation reconciliation still need the owner’s review. The holiday helper uses eligible wages and eligible days in the preceding 30 calendar days. Split overnight shifts into separate dated cards.
 
 ### Calculation scope
 
@@ -120,9 +61,19 @@ The earnings screen prefills approved straight-time hourly time cards. Review/re
 
 Every result starts **Needs CRA review**. Open the CRA calculator, enter the displayed inputs, compare and record corrected deductions if necessary. Corrected CPP/EI also require review of the non-periodic contribution portions. A note and confirmation are required to mark a result checked. This records the owner's comparison; the app does not contact CRA, submit payroll or certify CRA approval. The original estimate, employee settings and YTD inputs remain as a snapshot. Subsequent payroll uses verified actual deductions. Duplicate/overlapping periods, pending time cards and out-of-order runs are blocked. Void later records first to correct an earlier period; voiding preserves the audit record and does not reverse a payment.
 
-Payroll results are saved in the existing local journal/browser draft. Choose a save file for durable autosave. The application code is public on GitHub Pages; payroll records are not uploaded. A user-selected Drive desktop folder can sync the journal. This release still uses the existing file picker/browser recovery draft; a mandatory folder-opening shared-computer workflow remains separate work.
 
-Payroll results do not automatically create payment or expense entries. Record actual **net** payments separately using Record staff payment. Monthly clear still uses approved time-card gross wages and does not automatically include commission overrides, vacation or employer payroll contributions calculated in Payroll. Do not treat monthly clear as a reconciled payroll-inclusive profit figure.
+## Development and deployment
+
+Run Node.js 22+ with no dependency installation:
+
+~~~sh
+node server.mjs
+node --test tests/*.test.mjs
+~~~
+
+Serve public/ over localhost or HTTPS. The GitHub Actions Pages workflow tests the application and publishes only public/ on pushes to main. The live URL is https://chrojoh4.github.io/JazzDaily/ after a successful deployment.
+
+Tests cover allocations, historical rates, commission jobs, full staffing costs, cross-month payroll, duplicate payment prevention, file saving/conflicts, holiday reviews and offline shell behavior. Browser checks use fictional practice data. Native installation and Drive synchronization must also be checked on the user’s devices.
 
 ### Sources and verification
 
