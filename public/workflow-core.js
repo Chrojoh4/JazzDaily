@@ -21,6 +21,7 @@ export function payrollCostDays(db,staffId,start,end,earn){
   return weights;
 }
 export function periodLocked(db,staffId,date){return (db.payrollRuns??[]).some(r=>r.staffId===staffId&&r.status!=='void'&&r.input.start<=date&&date<=r.input.end);}
+export function historicallyPaid(db,card){const through=db.staff.find(s=>s.id===card.staffId)?.paidThrough;return !!through&&card.date<=through;}
 export function holidayEvidence(db,staffId,date){return JSON.stringify({start:db.staff.find(s=>s.id===staffId)?.payroll?.startDate??'',cards:db.timecards.filter(c=>c.staffId===staffId&&c.date>=addDays(date,-30)&&c.date<=date&&c.status!=='rejected').map(c=>[c.id,c.date,c.minutes,c.status]).sort((a,b)=>a[0].localeCompare(b[0]))});}
 export function holidayReviewed(db,staffId,date){return (db.holidayReviews??[]).some(r=>r.staffId===staffId&&r.date===date&&r.evidence===holidayEvidence(db,staffId,date));}
 export function payrollAlerts(db,staffId,start,end){

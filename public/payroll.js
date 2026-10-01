@@ -80,6 +80,7 @@ export function calculatePayroll(input,p,ytd){
 export function ytdFor(db,staffId,payDate){
   const staff=db.staff.find(s=>s.id===staffId);validateProfile(staff?.payroll);
   const p=staff.payroll,runs=(db.payrollRuns??[]).filter(r=>r.staffId===staffId&&r.status!=='void');
+  if(staff.paidThrough&&p.openingDate<=staff.paidThrough)throw Error('Enter actual earlier-pay balances and a first new pay date after '+staff.paidThrough+'. Earlier pay is already confirmed paid.');
   if(runs.some(r=>r.status==='draft'))throw Error('Verify or discard the existing estimate for this employee first.');
   if(runs.some(r=>r.input.payDate>=payDate))throw Error('Prepare payroll in pay-date order. Void later records first to correct an earlier one.');
   const y={...p.opening};
@@ -92,6 +93,7 @@ export function ytdFor(db,staffId,payDate){
 }
 export function createRun(db,staffId,input,id){
   const staff=db.staff.find(s=>s.id===staffId);if(!staff)throw Error('Choose an employee.');
+  if(staff.paidThrough&&input.start<=staff.paidThrough)throw Error('This employee is already confirmed paid through '+staff.paidThrough+'. Start the next payroll after that date.');
   if((db.payrollRuns??[]).some(r=>r.staffId===staffId&&r.status!=='void'&&r.input.start<=input.end&&r.input.end>=input.start))throw Error('This employee already has payroll covering these work dates.');
   if(db.timecards.some(c=>c.staffId===staffId&&c.date>=input.start&&c.date<=input.end&&c.status==='pending'))throw Error('Review pending time cards in this period first.');
   const ytd=ytdFor(db,staffId,input.payDate),profile=structuredClone(staff.payroll),estimate=calculatePayroll(input,profile,ytd);
