@@ -183,6 +183,7 @@ export function validateJournal(db) {
   if(!db||db.format!=='monthly-journal'||db.version!==1||!str(db.id)||!str(db.name)||!db.settings||!['remaining','whole'].includes(db.settings.allocation)||!Array.isArray(db.settings.weekdays)||db.settings.weekdays.some(d=>!Number.isInteger(d)||d<0||d>6)||!db.settings.google)fail();
   for(const key of ['staff','billTemplates','timecards','payrollPayments','importKeys'])if(!Array.isArray(db[key]))fail();
   if(!db.months||typeof db.months!=='object'||Array.isArray(db.months))fail();
+  if(db.recovery!==undefined&&(!db.recovery||!Array.isArray(db.recovery.notices)||db.recovery.notices.some(n=>!str(n))))fail();
   const ids=new Set(); const unique=x=>{if(!str(x.id)||!x.id||ids.has(x.id))fail();ids.add(x.id);};
   if(db.holidayReviews!==undefined){if(!Array.isArray(db.holidayReviews))fail();const seen=new Set();for(const r of db.holidayReviews){const key=r.staffId+'|'+r.date;if(!db.staff.some(s=>s.id===r.staffId)||!holidays2026[r.date]||!str(r.note)||!r.note.trim()||typeof r.evidence!=='string'||r.evidence.length>1000000||seen.has(key))fail();seen.add(key);}}
   for(const s of db.staff) {unique(s);if(!str(s.name)||!str(s.code)||!Array.isArray(s.rates)||typeof s.active!=='boolean')fail();const datesSeen=new Set();for(const r of s.rates){if(!validDate(r.effective)||!num(r.cents)||datesSeen.has(r.effective))fail();datesSeen.add(r.effective);}}
@@ -203,7 +204,7 @@ export function validateJournal(db) {
     for(const b of m.bills){bill(b);if(!num(b.paid)||!validDate(b.due)||!b.due.startsWith(month))fail();}
     for(const e of m.expenses){unique(e);if(!validDate(e.date)||!e.date.startsWith(month)||!num(e.amount)||!str(e.description)||!['personal','business'].includes(e.category))fail();}
   }
-  for(const c of db.timecards){unique(c);if(!db.staff.some(s=>s.id===c.staffId)||!validDate(c.date)||!Number.isInteger(c.minutes)||c.minutes<=0||c.minutes>1440||!['pending','approved','rejected'].includes(c.status)||!str(c.note)||!str(c.start)||!str(c.end)||(c.start&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(c.start))||(c.end&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(c.end)))fail();}
+  for(const c of db.timecards){unique(c);const missingCommissionHours=c.minutes===null&&c.hoursMissing===true&&['pending','rejected'].includes(c.status)&&rateForCard(db,c)?.kind==='commission'&&num(c.sales)&&!c.start&&!c.end;if(!db.staff.some(s=>s.id===c.staffId)||!validDate(c.date)||(!missingCommissionHours&&(!Number.isInteger(c.minutes)||c.minutes<=0||c.minutes>1440))||!['pending','approved','rejected'].includes(c.status)||!str(c.note)||!str(c.start)||!str(c.end)||(c.start&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(c.start))||(c.end&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(c.end)))fail();}
   for(const c of db.timecards){const s=db.staff.find(s=>s.id===c.staffId);if(c.roleId!==undefined&&c.roleId!=='default'&&!(s.roles??[]).some(r=>r.id===c.roleId))fail();if(c.sales!==undefined&&c.sales!==null&&!num(c.sales))fail();}
   for(const p of db.payrollPayments){unique(p);if(!db.staff.some(s=>s.id===p.staffId)||!validDate(p.date)||!num(p.amount)||!str(p.note))fail();}
   if(db.importKeys.some(k=>!str(k)))fail();
