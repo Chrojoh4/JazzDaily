@@ -1,6 +1,13 @@
 import {validatePayrollData,calculatePayroll,ytdFor} from './payroll.js';
 import {rateForCard,allocateCents,weekStart,addDays,periodLocked,payrollAlerts,holidays2026,holidayReviewed} from './workflow-core.js';
 export const uid = () => crypto.randomUUID();
+export function moveBill(db,month,id,date){
+  const m=db.months[month],bill=m?.bills.find(b=>b.id===id);
+  if(!bill||!dates(month).includes(date))throw Error('Choose a date in this month for this bill.');
+  if(bill.due===date)return false;
+  bill.due=date;
+  return true;
+}
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 export const sum = a => a.reduce((x,y) => x+y, 0);
 export const money = n => new Intl.NumberFormat('en-CA', {style:'currency', currency:'CAD'}).format(n/100);

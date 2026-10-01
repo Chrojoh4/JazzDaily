@@ -2,7 +2,7 @@ import './install.js';
 import {easyUI,rateLabel} from './easy-ui.js';
 import {rateForCard,periodLocked,historicallyPaid} from './workflow-core.js';
 import {payrollUI} from './payroll-ui.js';
-import {uid,today,sum,money,cents,dates,weekday,emptyJournal,ensureMonth,allocations,setDayStatus,rateFor,earned,dayTotals,totals,shiftMinutes,cardIssue,parseCSV,prepareImport,validateJournal} from './core.js';
+import {moveBill,uid,today,sum,money,cents,dates,weekday,emptyJournal,ensureMonth,allocations,setDayStatus,rateFor,earned,dayTotals,totals,shiftMinutes,cardIssue,parseCSV,prepareImport,validateJournal} from './core.js';
 import {JournalStore,download,journalFiles,newJournalFile} from './storage.js';
 const $=s=>document.querySelector(s);
 const payroll=payrollUI({getDB:()=>db,modal,commit});
@@ -33,7 +33,7 @@ function render(){
   const primary=[['today','Today'],['clock','Staff time card'],['tax','Pay staff']],more=[['journal','Monthly calendar'],['staff','Employees & pay'],['time','Review time cards'],['bills','Monthly bills'],['expenses','Expenses'],['costs','Working days'],['files','My journal & backups']];
   const nav=items=>items.map(([v,label])=>`<button data-view="${v}" class="${view===v?'active':''}" ${view===v?'aria-current="page"':''}>${label}</button>`).join('');
   $('#app').innerHTML=`<div class="shell"><aside class="sidebar"><div class="brand">JazzDaily<small>One day at a time</small></div><nav aria-label="Main navigation">${nav(primary)}<details ${more.some(([v])=>v===view)?'open':''}><summary>More</summary>${nav(more)}</details></nav><div class="sidebar-foot">${esc(db.name)}<br>${button('Close journal','close-journal')}</div></aside><main class="workspace"><header class="topbar"><div><div class="eyebrow">${esc(db.name)}</div><h1>${titles[view][0]}</h1><p class="sub">${titles[view][1]}</p></div>${demoMode?button('Finish practice','close-journal'):''}</header><div class="save-banner"><strong class="save-state" role="status" aria-live="polite"></strong>${!store.handle&&!demoMode?button('Choose a save file','save-as','','primary'):''}${button('Save a backup','backup')}</div>${db.recovery?.notices?.length?`<details class="notice warn"><summary>Recovered spreadsheet records · Read these notes</summary>${db.recovery.notices.map(n=>`<p>${esc(n)}</p>`).join('')}</details>`:''}${({today:easy.todayView,clock:easy.clockView,tax:payroll.render,journal:renderJournal,bills:renderBills,staff:easy.staffView,time:renderTime,expenses:renderExpenses,costs:renderCosts,files:renderFiles})[view]()}</main></div>`;
-  mountCalendarToggles();updateStatus();
+  mountCalendarToggles();mountBillDragging();updateStatus();
 }
 function mountCalendarToggles(){
   document.querySelectorAll('.day:not(.blank)').forEach(cell=>{
@@ -48,16 +48,46 @@ function mountCalendarToggles(){
     });
   });
 }
+function mountBillDragging(){
+  let dragged=null;
+  const clear=()=>document.querySelectorAll('.bill-dragging,.bill-drop-target').forEach(el=>el.classList.remove('bill-dragging','bill-drop-target'));
+  document.querySelectorAll('.bill-tag').forEach(tag=>{
+    tag.draggable=true;
+    tag.title='Drag to another date in this month, or click to edit the due date.';
+    tag.addEventListener('dragstart',e=>{
+      dragged=tag.dataset.id;
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',dragged);
+      tag.classList.add('bill-dragging');
+    });
+    tag.addEventListener('dragend',()=>{dragged=null;clear();});
+  });
+  document.querySelectorAll('.day[data-date]').forEach(cell=>{
+    cell.addEventListener('dragover',e=>{
+      if(!dragged)return;
+      e.preventDefault();e.dataTransfer.dropEffect='move';
+      document.querySelectorAll('.bill-drop-target').forEach(el=>el.classList.remove('bill-drop-target'));
+      cell.classList.add('bill-drop-target');
+    });
+    cell.addEventListener('dragleave',e=>{if(!cell.contains(e.relatedTarget))cell.classList.remove('bill-drop-target');});
+    cell.addEventListener('drop',e=>{
+      if(!dragged)return;
+      e.preventDefault();e.stopPropagation();
+      const id=dragged,date=cell.dataset.date;dragged=null;clear();
+      try{if(moveBill(db,month,id,date)){commit();toast('Bill moved to '+dateLabel(date)+'. This month only.');}}catch(error){toast(error.message);}
+    });
+  });
+}
 function renderJournal(){
   const t=totals(db,month),a=allocations(db,month),m=db.months[month];
   const active=Object.keys(a.values), future=active.filter(d=>m.days[d].status==='planned'), target=future.length?Math.round(sum(future.map(d=>a.values[d]))/future.length):0;
-  return `<div class="row between">${monthControl()}<div class="actions">${button('Working days','schedule')}${button('+ Daily entry','day',today().startsWith(month)?today():month+'-01','','')}</div></div><div class="metrics">${metric('Sales entered',money(t.sales),`${t.entered} day${t.entered===1?'':'s'} recorded`)}${metric('Staffing cost',t.staffing===null?'Needs attention':money(t.staffing),t.staffingEstimated?'Includes estimated vacation & employer CPP/EI':'Wages, vacation & employer CPP/EI')}${metric('Daily bill target',money(target),`${future.length} planned · ${a.active} working days`)}${metric('Money left',t.clear===null?'Needs attention':money(t.clear),'Recorded sales less staffing, bills & expenses',true)}</div>${a.outstanding?`<div class="notice warn">${money(a.outstanding)} remains unallocated. Select another working day or review your operating costs.</div>`:''}${section(monthName(),renderCalendar(),`<span class="sub">Select a date to enter sales or change its status</span>`)}${renderWeeks()}<p class="footnote">Staffing includes wages, vacation and employer CPP/EI. Unchecked payroll is estimated. All recorded staffing and expenses in the month reduce money left, even on days without sales. Bills are covered as sales days are entered; future bill allowances are not yet deducted. This is not a bank balance.</p>`;
+  return `<div class="row between">${monthControl()}<div class="actions">${button('Working days','schedule')}${button('+ Daily entry','day',today().startsWith(month)?today():month+'-01','','')}</div></div><div class="metrics">${metric('Sales entered',money(t.sales),`${t.entered} day${t.entered===1?'':'s'} recorded`)}${metric('Staffing cost',t.staffing===null?'Needs attention':money(t.staffing),t.staffingEstimated?'Includes estimated vacation & employer CPP/EI':'Wages, vacation & employer CPP/EI')}${metric('Daily bill target',money(target),`${future.length} planned · ${a.active} working days`)}${metric('Money left',t.clear===null?'Needs attention':money(t.clear),'Recorded sales less staffing, bills & expenses',true)}</div>${a.outstanding?`<div class="notice warn">${money(a.outstanding)} remains unallocated. Select another working day or review your operating costs.</div>`:''}${section(monthName(),renderCalendar(),`<span class="sub">Click a date to enter sales. Drag a bill to move it.</span>`)}${renderWeeks()}<p class="footnote">Staffing includes wages, vacation and employer CPP/EI. Unchecked payroll is estimated. All recorded staffing and expenses in the month reduce money left, even on days without sales. Bills are covered as sales days are entered; future bill allowances are not yet deducted. This is not a bank balance.</p>`;
 }
 function renderCalendar(){
   const m=db.months[month],all=dates(month),offset=weekday(all[0]);
   let cells='<div class="day blank" aria-hidden="true"></div>'.repeat(offset);
   for(const date of all){const d=m.days[date],t=dayTotals(db,month,date),bills=m.bills.filter(b=>b.due===date);
-    cells+=`<div class="day ${d.status}"><div class="day-head">${button(String(+date.slice(-2)),'day',date,'date-button')}<span class="status">${d.status}</span></div>${['planned','worked'].includes(d.status)||d.sales!==null?`<div class="day-line"><span>Sales</span><b>${t.sales===null?'—':money(t.sales)}</b></div><div class="day-line"><span>Staffing</span><b>${t.staffing===null?'Check payroll':money(t.staffing)}</b></div><div class="day-line"><span>Bills</span><b>${money(t.allowance)}</b></div>${t.expenses?`<div class="day-line"><span>Extras</span><b>${money(t.expenses)}</b></div>`:''}<div class="day-line clear"><span>Clear</span><b class="${t.clear<0?'negative':t.clear>0?'positive':''}">${t.clear===null?'—':money(t.clear)}</b></div>`:`<div class="day-line">${d.status==='cancelled'?'Day cancelled':'No work planned'}</div>${t.wages||t.expenses?'<div class="negative footnote">Records need review</div>':''}`}${bills.map(b=>button(`${esc(b.company)} · ${esc(b.label)}<br>${money(b.amount)}${b.paid>=b.amount?' · Paid':''}`,'bill',b.id,`bill-tag ${b.category}`)).join('')}</div>`;
+    cells+=`<div class="day ${d.status}" data-date="${date}"><div class="day-head">${button(String(+date.slice(-2)),'day',date,'date-button')}<span class="status">${d.status}</span></div>${['planned','worked'].includes(d.status)||d.sales!==null?`<div class="day-line"><span>Sales</span><b>${t.sales===null?'—':money(t.sales)}</b></div><div class="day-line"><span>Staffing</span><b>${t.staffing===null?'Check payroll':money(t.staffing)}</b></div><div class="day-line"><span>Bills</span><b>${money(t.allowance)}</b></div>${t.expenses?`<div class="day-line"><span>Extras</span><b>${money(t.expenses)}</b></div>`:''}<div class="day-line clear"><span>Clear</span><b class="${t.clear<0?'negative':t.clear>0?'positive':''}">${t.clear===null?'—':money(t.clear)}</b></div>`:`<div class="day-line">${d.status==='cancelled'?'Day cancelled':'No work planned'}</div>${t.wages||t.expenses?'<div class="negative footnote">Records need review</div>':''}`}${bills.map(b=>button(`${esc(b.company)} · ${esc(b.label)}<br>${money(b.amount)}${b.paid>=b.amount?' · Paid':''}`,'bill',b.id,`bill-tag ${b.category}`)).join('')}</div>`;
   }
   cells+='<div class="day blank" aria-hidden="true"></div>'.repeat((7-(offset+all.length)%7)%7);
   return `<div class="calendar-scroll"><div class="calendar">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div></div><div class="legend"><span>Planned</span><span class="worked">Worked</span><span class="cancelled">Cancelled / off</span></div>`;
